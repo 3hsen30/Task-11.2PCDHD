@@ -1,0 +1,91 @@
+# -*- coding: utf-8 -*-
+
+#Ehsen Tahir s223368332
+
+import time
+import threading
+import adafruit_dht
+import board
+import smbus2
+import tkinter as tk
+
+# Initialize DHT11 sensor
+dht_device = adafruit_dht.DHT11(board.D4)
+
+# Define some constants from the datasheet for BH1750 sensor
+DEVICE = 0x23 # Default device I2C address
+ONE_TIME_HIGH_RES_MODE_1 = 0x20 # Start measurement at 1lx resolution.
+
+# Initialize I2C bus
+bus = smbus2.SMBus(1)  # Rev 2 Pi uses 1
+
+def convertToNumber(data):
+    # Simple function to convert 2 bytes of data into a decimal number.
+    result = (data[1] + (256 * data[0])) / 1.2
+    return result
+
+def readLight(addr=DEVICE):
+    # Read data from I2C interface
+    data = bus.read_i2c_block_data(addr, ONE_TIME_HIGH_RES_MODE_1, 2)  # Specify length=2 for 2 bytes of data
+    return convertToNumber(data)
+
+def read_dht_sensor(label_temp, label_hum):
+    while True:
+        try:
+            temperature_c = None
+            humidity = None
+            while temperature_c is None or humidity is None:
+                temperature_c = dht_device.temperature
+                humidity = dht_device.humidity
+
+            label_temp.config(text="Temperature: {:.1f}\u00b0C".format(temperature_c))
+            label_hum.config(text="Humidity: {:.1f}%".format(humidity))
+
+        except RuntimeError as err:
+            print(err.args[0])
+
+        time.sleep(2.0)
+
+def read_light_sensor(label_light):
+    while True:
+        try:
+            light_level = readLight()
+            label_light.config(text="Light Level: {:.2f} lx".format(light_level))
+
+        except OSError as err:
+            print("Error reading BH1750 sensor:", err)
+
+        time.sleep(2.0)
+
+def main():
+    root = tk.Tk()
+    root.title("Sensor Data")
+    root.configure(bg="blue")
+
+    frame_temp_hum = tk.Frame(root, bg="blue")
+    frame_temp_hum.pack()
+
+    label_temp = tk.Label(frame_temp_hum, text="Temperature: ", bg="blue", fg="white", font=("Arial", 12))
+    label_temp.pack(side="left")
+
+    label_hum = tk.Label(frame_temp_hum, text="Humidity: ", bg="blue", fg="white", font=("Arial", 12))
+    label_hum.pack(side="left")
+
+    frame_light = tk.Frame(root, bg="blue")
+    frame_light.pack()
+
+    label_light = tk.Label(frame_light, text="Light Level: ", bg="blue", fg="white", font=("Arial", 12))
+    label_light.pack(side="left")
+
+    dht_thread = threading.Thread(target=read_dht_sensor, args=(label_temp, label_hum))
+    dht_thread.daemon = True
+    dht_thread.start()
+
+    light_thread = threading.Thread(target=read_light_sensor, args=(label_light,))
+    light_thread.daemon = True
+    light_thread.start()
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
